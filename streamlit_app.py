@@ -1,151 +1,116 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+from datetime import datetime, timedelta
+import plotly.express as px
 
-# Set the title and favicon that appear in the Browser's tab bar.
+# ------------------------------------------------------------
+# Configurazione pagina
 st.set_page_config(
     page_title='Activity Monitor 19-INTEGREX_J200',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_icon=':earth_americas:',
+    layout="wide"
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
+# ------------------------------------------------------------
+# Funzione per caricare i dati dal CSV
 @st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def load_data():
+    file_path = r"P:\AREA LEAN\KPI\Naldoni\TEMPI PER MACCHINA\DA CIMCO\Activity Monitor T19.csv"
+    df = pd.read_csv(file_path, sep=";", parse_dates=["Data"])
+    return df
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+df = load_data()
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+# ------------------------------------------------------------
+# Traduzioni
+translations = {
+    "it": {"Work": "Lavoro", "Pause": "Pausa", "Alarm": "Allarme", "Down": "Spenta"},
+    "en": {"Work": "Work", "Pause": "Pause", "Alarm": "Alarm", "Down": "Down"},
+    "fr": {"Work": "Travail", "Pause": "Pause", "Alarm": "Alarme", "Down": "Éteinte"},
+    "es": {"Work": "Trabajo", "Pause": "Pausa", "Alarm": "Alarma", "Down": "Apagada"},
+    "de": {"Work": "Arbeit", "Pause": "Pause", "Alarm": "Alarm", "Down": "Aus"}
+}
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+# ------------------------------------------------------------
+# Sidebar
+st.sidebar.header("Impostazioni")
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+lingua = st.sidebar.selectbox("Lingua", ["it", "en", "fr", "es", "de"], format_func=lambda x: {
+    "it": "Italiano", "en": "English", "fr": "Français", "es": "Español", "de": "Deutsch"
+}[x])
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
+macchine = df["DescrMacchina"].unique()
+macchina = st.sidebar.selectbox("Macchina", macchine)
 
-    return gdp_df
+modalita_confronto = st.sidebar.checkbox("Attiva modalità confronto")
 
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: Activity Monitor 19-INTEGREX_J200
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN', 'ITA'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
+periodo = st.sidebar.radio(
+    "Periodo",
+    ["Giorno", "Settimana", "Mese", "Periodo personalizzato"]
 )
 
-''
-''
+oggi = datetime.today()
+if periodo == "Giorno":
+    start_date = oggi
+    end_date = oggi
+elif periodo == "Settimana":
+    start_date = oggi - timedelta(days=7)
+    end_date = oggi
+elif periodo == "Mese":
+    start_date = oggi - timedelta(days=30)
+    end_date = oggi
+elif periodo == "Periodo personalizzato":
+    start_date = st.sidebar.date_input("Data di inizio", oggi - timedelta(days=7))
+    end_date = st.sidebar.date_input("Data di fine", oggi)
 
+# ------------------------------------------------------------
+# Filtraggio dati
+mask = (
+    (df["DescrMacchina"] == macchina) &
+    (df["Data"] >= pd.to_datetime(start_date)) &
+    (df["Data"] <= pd.to_datetime(end_date))
+)
+df_filtered = df.loc[mask]
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+# Somma dei dati
+sums = df_filtered[["Work", "Pause", "Alarm", "Down"]].sum()
 
-st.header(f'GDP in {to_year}', divider='gray')
+# Traduzioni
+sums.index = [translations[lingua][col] for col in sums.index]
 
-''
+# ------------------------------------------------------------
+# Disegno grafico
+def draw_pie(sums, title):
+    fig = px.pie(
+        names=sums.index,
+        values=sums.values,
+        title=title
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-cols = st.columns(4)
+# ------------------------------------------------------------
+# Layout pagina
+st.title(":earth_americas: Activity Monitor 19-INTEGREX_J200")
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+if modalita_confronto:
+    col1, col2 = st.columns(2)
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+    with col1:
+        draw_pie(sums, f"Macchina {macchina} - Periodo selezionato")
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
+    with col2:
+        # Se in confronto puoi prevedere un secondo filtro (es. altra macchina)
+        altra_macchina = st.sidebar.selectbox("Seconda macchina per confronto", macchine)
+        mask2 = (
+            (df["DescrMacchina"] == altra_macchina) &
+            (df["Data"] >= pd.to_datetime(start_date)) &
+            (df["Data"] <= pd.to_datetime(end_date))
         )
+        df2 = df.loc[mask2]
+        sums2 = df2[["Work", "Pause", "Alarm", "Down"]].sum()
+        sums2.index = [translations[lingua][col] for col in sums2.index]
+        draw_pie(sums2, f"Macchina {altra_macchina} - Periodo selezionato")
+
+else:
+    draw_pie(sums, f"Macchina {macchina} - Periodo selezionato")
+
