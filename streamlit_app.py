@@ -64,8 +64,11 @@ gruppi_macchine = {
     "TUTTE TUNISIA": ["F03", "T15", "T22"]
 }
 
-
-mesi_nome = {i: calendar.month_name[i] for i in range(1,13)}
+mesi_nome = {
+    1: "Gennaio", 2: "Febbraio", 3: "Marzo", 4: "Aprile",
+    5: "Maggio", 6: "Giugno", 7: "Luglio", 8: "Agosto",
+    9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre"
+}
 
 # ------------------------------------------------------------
 # Sidebar solo per il periodo
@@ -103,23 +106,76 @@ def filtri_grafico(label, tipo_periodo, df):
     # Selectbox mostra i nomi originali
     macchina = st.selectbox(f"Macchina - {label}", macchine_sorted, key=f"macchina_{label}")
 
-    oggi = datetime.today()
+    #####oggi = datetime.today()
     if tipo_periodo == "Giorno":
-        giorno_sel = st.date_input(f"Seleziona giorno - {label}", oggi.date(), key=f"giorno_{label}")
+        giorni_disponibili = sorted(df['Data'].dt.date.unique())  # tutti i giorni disponibili nel dataset
+
+        # Trova il penultimo giorno disponibile
+        if len(giorni_disponibili) >= 2:
+            default_giorno = giorni_disponibili[-2]
+        else:
+            default_giorno = giorni_disponibili[0]
+
+        giorno_sel = st.date_input(
+            f"Seleziona giorno - {label}",
+            default_giorno,
+            key=f"giorno_{label}"
+        )
+
         start_date = pd.to_datetime(giorno_sel)
         end_date = start_date
 
     elif tipo_periodo == "Settimana":
-        anno_sel = st.selectbox(f"Anno - {label}", df['Anno'].unique(), index=0, key=f"anno_{label}")
-        settimane_disponibili = df[df['Anno']==anno_sel]['Settimana'].unique()
-        settimana_sel = st.selectbox(f"Settimana - {label}", sorted(settimane_disponibili), key=f"settimana_{label}")
+        anno_sel = st.selectbox(
+            f"Anno - {label}", 
+            df['Anno'].unique(), 
+            index=0, 
+            key=f"anno_{label}"
+        )
+
+        settimane_disponibili = sorted(df[df['Anno'] == anno_sel]['Settimana'].unique())
+
+        # Trova la penultima settimana disponibile
+        if len(settimane_disponibili) >= 2:
+            default_index = len(settimane_disponibili) - 2  # penultima
+        else:
+            default_index = 0  # se c'è solo una settimana disponibile
+
+        settimana_sel = st.selectbox(
+            f"Settimana - {label}", 
+            settimane_disponibili, 
+            index=default_index, 
+            key=f"settimana_{label}"
+        )
+
+        # Calcola le date di inizio e fine settimana
         start_date = pd.to_datetime(f"{anno_sel}-W{settimana_sel}-1", format="%Y-W%W-%w")
         end_date = start_date + timedelta(days=6)
 
     elif tipo_periodo == "Mese":
-        anno_sel = st.selectbox(f"Anno - {label}", df['Anno'].unique(), index=0, key=f"annoM_{label}")
-        mesi_disponibili = df[df['Anno']==anno_sel]['Mese'].unique()
-        mese_sel = st.selectbox(f"Mese - {label}", sorted(mesi_disponibili), format_func=lambda x: calendar.month_name[x], key=f"mese_{label}")
+        anno_sel = st.selectbox(
+            f"Anno - {label}",
+            df['Anno'].unique(),
+            index=0,
+            key=f"annoM_{label}"
+        )
+
+        mesi_disponibili = sorted(df[df['Anno'] == anno_sel]['Mese'].unique())
+
+        # Trova l'indice del penultimo mese disponibile
+        if len(mesi_disponibili) >= 2:
+            default_index = len(mesi_disponibili) - 2  # penultimo mese
+        else:
+            default_index = 0  # se c'è solo un mese disponibile
+
+        mese_sel = st.selectbox(
+            f"Mese - {label}",
+            mesi_disponibili,
+            format_func=lambda x: mesi_nome[x],
+            index=default_index,
+            key=f"mese_{label}"
+        )
+
         start_date = pd.to_datetime(f"{anno_sel}-{mese_sel:02d}-01")
         if mese_sel == 12:
             end_date = pd.to_datetime(f"{anno_sel+1}-01-01") - timedelta(days=1)
@@ -127,8 +183,31 @@ def filtri_grafico(label, tipo_periodo, df):
             end_date = pd.to_datetime(f"{anno_sel}-{mese_sel+1:02d}-01") - timedelta(days=1)
 
     elif tipo_periodo == "Periodo personalizzato":
-        start_date = pd.to_datetime(st.date_input(f"Data di inizio - {label}", oggi - timedelta(days=7), key=f"start_{label}"))
-        end_date = pd.to_datetime(st.date_input(f"Data di fine - {label}", oggi, key=f"end_{label}"))
+        giorni_disponibili = sorted(df['Data'].dt.date.unique())
+
+        if len(giorni_disponibili) >= 2:
+            default_start = giorni_disponibili[-2]
+            default_end = giorni_disponibili[-1]
+        else:
+            default_start = giorni_disponibili[0]
+            default_end = giorni_disponibili[0]
+
+        intervallo = st.date_input(
+            f"Seleziona periodo - {label}",
+            (default_start, default_end),
+            key=f"periodo_{label}"
+        )
+
+        # Caso: utente ha selezionato solo 1 data
+        if isinstance(intervallo, tuple) and len(intervallo) == 2:
+            start_date, end_date = intervallo
+        else:
+            # Evita errori: non filtrare ancora
+            st.warning("Seleziona entrambe le date per il periodo personalizzato.")
+            return macchina, None, None
+
+        start_date = pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
 
     return macchina, start_date, end_date
 
@@ -183,10 +262,19 @@ modalita_confronto = st.checkbox("Attiva modalità confronto")
 if not modalita_confronto:
     # singolo grafico
     macchina, start_date, end_date = filtri_grafico("Grafico", tipo_periodo, df)
-    df_filtered = filter_data(df, macchina, start_date, end_date)
-    sums = df_filtered[["Work", "Pause", "Alarm", "Down"]].sum()
-    sums.index = [translations["it"][col] for col in sums.index]
-    draw_pie(sums, f"Macchina {macchina} - Periodo selezionato", key=f"{macchina}_{tipo_periodo}")
+
+    if start_date is not None and end_date is not None:
+        df_filtered = filter_data(df, macchina, start_date, end_date)
+
+        if df_filtered.empty:
+            if tipo_periodo == "Giorno":
+                st.warning("Dati non presenti in questo giorno")
+            else:
+                st.warning("Dati non presenti in questo periodo")
+        else:
+            sums = df_filtered[["Work", "Pause", "Alarm", "Down"]].sum()
+            sums.index = [translations["it"][col] for col in sums.index]
+            draw_pie(sums, f"Macchina {macchina} - Periodo selezionato", key=f"{macchina}_{tipo_periodo}")
 
 else:
     # confronto due grafici affiancati
@@ -194,14 +282,30 @@ else:
 
     with col1:
         macchina1, start1, end1 = filtri_grafico("Grafico 1", tipo_periodo, df)
-        df1 = filter_data(df, macchina1, start1, end1)
-        sums1 = df1[["Work", "Pause", "Alarm", "Down"]].sum()
-        sums1.index = [translations["it"][col] for col in sums1.index]
-        draw_pie(sums1, f"Macchina {macchina1} - Periodo selezionato", key=f"{macchina1}_{tipo_periodo}_1")
+        if start1 is not None and end1 is not None:
+            df1 = filter_data(df, macchina1, start1, end1)
+
+            if df1.empty:
+                if tipo_periodo == "Giorno":
+                    st.warning("Dati non presenti in questo giorno")
+                else:
+                    st.warning("Dati non presenti in questo periodo")
+            else:
+                sums1 = df1[["Work", "Pause", "Alarm", "Down"]].sum()
+                sums1.index = [translations["it"][col] for col in sums1.index]
+                draw_pie(sums1, f"Macchina {macchina1} - Periodo selezionato", key=f"{macchina1}_{tipo_periodo}_1")
 
     with col2:
         macchina2, start2, end2 = filtri_grafico("Grafico 2", tipo_periodo, df)
-        df2 = filter_data(df, macchina2, start2, end2)
-        sums2 = df2[["Work", "Pause", "Alarm", "Down"]].sum()
-        sums2.index = [translations["it"][col] for col in sums2.index]
-        draw_pie(sums2, f"Macchina {macchina2} - Periodo selezionato", key=f"{macchina2}_{tipo_periodo}_2")
+        if start2 is not None and end2 is not None:
+            df2 = filter_data(df, macchina2, start2, end2)
+
+            if df2.empty:
+                if tipo_periodo == "Giorno":
+                    st.warning("Dati non presenti per questo giorno")
+                else:
+                    st.warning("Dati non presenti per questo periodo")
+            else:
+                sums2 = df2[["Work", "Pause", "Alarm", "Down"]].sum()
+                sums2.index = [translations["it"][col] for col in sums2.index]
+                draw_pie(sums2, f"Macchina {macchina2} - Periodo selezionato", key=f"{macchina2}_{tipo_periodo}_2")
