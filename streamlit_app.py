@@ -33,6 +33,38 @@ translations = {
     "en": {"Work": "Work", "Pause": "Pause", "Alarm": "Alarm", "Down": "Down"},
 }
 
+# ------------------------------------------------------------
+# Gruppi di macchine per macro-selezioni
+gruppi_macchine = {
+    "FRESE ITALIA": [
+        "1-PFG", "18-MCM_CLOCK", "24-MCM_CONCEPT", "33-VTC800_MAZAK",
+        "36-DMG_NMV_3000", "72-VARIAXIS_J500", "73-VARIAXIS_J500",
+        "103-DMG_NMV_5000", "104-DMG_NMV_3000", "136_DMG", "158-DMG"
+    ],
+    "TORNI ITALIA": [
+        "7-SL25", "8-SL150MC", "19-INTEGREX_J200", "26-INTEGREX_J200",
+        "27-INTEGREX_200", "30-LYNX_300M", "31-QTN_200_MSY", "34-INTEGREX_I300",
+        "66-QTN_200_MSY", "70-PUMA_GT2600LM", "71-INTEGREX", "77-INTEGREX"
+    ],
+    "ELETTROEROSIONE ITALIA": [
+        "16-ALFA1_IA_FANUC", "81-MITSUBISHI_MV1200S", 
+        "115-MITSUBISHI_MV1200R", "161-MITSUBISHI_MV1200R"
+    ],
+    "TUTTE ITALIA": [
+        "1-PFG", "7-SL25", "8-SL150MC", "16-ALFA1_IA_FANUC", "18-MCM_CLOCK",
+        "19-INTEGREX_J200", "24-MCM_CONCEPT", "26-INTEGREX_J200", "27-INTEGREX_200",
+        "33-VTC800_MAZAK", "103-DMG_NMV_5000", "30-LYNX_300M", "31-QTN_200_MSY",
+        "34-INTEGREX_I300", "36-DMG_NMV_3000", "66-QTN_200_MSY", "70-PUMA_GT2600LM",
+        "71-INTEGREX", "72-VARIAXIS_J500", "73-VARIAXIS_J500", "77-INTEGREX",
+        "81-MITSUBISHI_MV1200S", "104-DMG_NMV_3000", "115-MITSUBISHI_MV1200R",
+        "136_DMG", "158-DMG", "161-MITSUBISHI_MV1200R"
+    ],
+    "FRESE TUNISIA": ["F03"],
+    "TORNI TUNISIA": ["T15", "T22"],
+    "TUTTE TUNISIA": ["F03", "T15", "T22"]
+}
+
+
 mesi_nome = {i: calendar.month_name[i] for i in range(1,13)}
 
 # ------------------------------------------------------------
@@ -51,26 +83,24 @@ def filtri_grafico(label, tipo_periodo, df):
     st.subheader(label)
     import re
 
-    # Prendi tutti i nomi macchina unici
+   # Lista dei nomi macchina originali
     macchine = df["DescrMacchina"].unique()
 
-    # Funzione per estrarre il numero iniziale (anche se preceduto da lettere)
+    # Aggiungi i gruppi definiti
+    macchine = list(macchine) + list(gruppi_macchine.keys())
+
+    # Ordina i nomi macchina numericamente (solo per quelli che hanno un numero)
+    import re
     def estrai_numero(nome):
-        """
-        Estrae il numero iniziale da un nome macchina.
-        - Se inizia con lettere (es. T15), prende la parte numerica.
-        - Se inizia con numero e separatore (- o _), prende quel numero.
-        - Se non trova nulla, mette 9999 (va in fondo).
-        """
         match = re.match(r"[A-Za-z]*?(\d+)", nome)
         if match:
             return int(match.group(1))
+        # Metti in fondo i gruppi o nomi senza numero
         return 9999
 
-    # Ordina i nomi usando il numero estratto
     macchine_sorted = sorted(macchine, key=lambda x: estrai_numero(x))
 
-    # Selectbox mantiene i nomi originali
+    # Selectbox mostra i nomi originali
     macchina = st.selectbox(f"Macchina - {label}", macchine_sorted, key=f"macchina_{label}")
 
     oggi = datetime.today()
