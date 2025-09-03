@@ -135,11 +135,19 @@ def filtri_grafico(label, tipo_periodo, df):
 # ------------------------------------------------------------
 # Funzione per filtrare dati
 def filter_data(df, macchina, start_date, end_date):
-    mask = (
-        (df["DescrMacchina"] == macchina) &
-        (df["Data"] >= start_date) &
-        (df["Data"] <= end_date)
-    )
+    if macchina in gruppi_macchine:
+        macchine_da_usare = gruppi_macchine[macchina]
+        mask = (
+            df["DescrMacchina"].isin(macchine_da_usare) &
+            (df["Data"] >= start_date) &
+            (df["Data"] <= end_date)
+        )
+    else:
+        mask = (
+            (df["DescrMacchina"] == macchina) &
+            (df["Data"] >= start_date) &
+            (df["Data"] <= end_date)
+        )
     return df.loc[mask]
 
 # ------------------------------------------------------------
