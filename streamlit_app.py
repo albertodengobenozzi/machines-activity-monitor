@@ -49,8 +49,29 @@ st.title(":earth_americas: Monitoraggio attività delle macchine")
 # Funzione per selezionare i filtri di un grafico
 def filtri_grafico(label, tipo_periodo, df):
     st.subheader(label)
+    import re
+
+    # Prendi tutti i nomi macchina unici
     macchine = df["DescrMacchina"].unique()
-    macchina = st.selectbox(f"Macchina - {label}", macchine, key=f"macchina_{label}")
+
+    # Funzione per estrarre il numero iniziale (anche se preceduto da lettere)
+    def estrai_numero(nome):
+        """
+        Estrae il numero iniziale da un nome macchina.
+        - Se inizia con lettere (es. T15), prende la parte numerica.
+        - Se inizia con numero e separatore (- o _), prende quel numero.
+        - Se non trova nulla, mette 9999 (va in fondo).
+        """
+        match = re.match(r"[A-Za-z]*?(\d+)", nome)
+        if match:
+            return int(match.group(1))
+        return 9999
+
+    # Ordina i nomi usando il numero estratto
+    macchine_sorted = sorted(macchine, key=lambda x: estrai_numero(x))
+
+    # Selectbox mantiene i nomi originali
+    macchina = st.selectbox(f"Macchina - {label}", macchine_sorted, key=f"macchina_{label}")
 
     oggi = datetime.today()
     if tipo_periodo == "Giorno":
@@ -68,7 +89,7 @@ def filtri_grafico(label, tipo_periodo, df):
     elif tipo_periodo == "Mese":
         anno_sel = st.selectbox(f"Anno - {label}", df['Anno'].unique(), index=0, key=f"annoM_{label}")
         mesi_disponibili = df[df['Anno']==anno_sel]['Mese'].unique()
-        mese_sel = st.selectbox(f"Mese - {label}", sorted(mesi_disponibili), format_func=lambda x: mesi_nome[x], key=f"mese_{label}")
+        mese_sel = st.selectbox(f"Mese - {label}", sorted(mesi_disponibili), format_func=lambda x: calendar.month_name[x], key=f"mese_{label}")
         start_date = pd.to_datetime(f"{anno_sel}-{mese_sel:02d}-01")
         if mese_sel == 12:
             end_date = pd.to_datetime(f"{anno_sel+1}-01-01") - timedelta(days=1)
