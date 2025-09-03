@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 import calendar
+import os
 
 # ------------------------------------------------------------
 # Configurazione pagina
@@ -16,7 +17,7 @@ st.set_page_config(
 # Funzione per caricare i dati dal CSV
 @st.cache_data
 def load_data():
-    file_path = r"/workspaces/activity-monitor-19-integrex-j200/Machines Activity Monitor.csv"
+    file_path = os.path.join(os.path.dirname(__file__), "Machines Activity Monitor.csv")
     df = pd.read_csv(file_path, sep=";", parse_dates=["Data"])
     df['Anno'] = df['Data'].dt.year
     df['Settimana'] = df['Data'].dt.isocalendar().week
