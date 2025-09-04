@@ -18,7 +18,19 @@ st.set_page_config(
 @st.cache_data
 def load_data():
     file_path = os.path.join(os.path.dirname(__file__), "Machines Activity Monitor.csv")
-    df = pd.read_csv(file_path, sep=";", parse_dates=["Data"])
+    df = pd.read_csv(
+        file_path,
+        sep=";",
+        parse_dates=["Data"],
+        thousands="."   # interpreta i punti come separatori delle migliaia
+    )
+    
+    # --------------------------------------------------------
+    # Trasforma le colonne in ore corrette
+    for col in ["Work", "Pause", "Alarm", "Down"]:
+        df[col] = df[col] / 100_000_000  # aggiustamento numerico
+
+    # --------------------------------------------------------
     df['Anno'] = df['Data'].dt.year
     df['Settimana'] = df['Data'].dt.isocalendar().week
     df['Mese'] = df['Data'].dt.month
