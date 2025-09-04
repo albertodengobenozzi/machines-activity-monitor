@@ -23,28 +23,30 @@ import pandas as pd
 @st.cache_data
 def load_data():
     try:
-        # Connessione al server SQL usando login SQL (sa)
-        conn = pyodbc.connect(
-            'DRIVER={SQL Server};SERVER=192.168.50.243;DATABASE=BENOZZIPROD;UID=sa;PWD=BIRoccio'
+        from sqlalchemy import create_engine
+
+        # Connessione al server SQL usando SQLAlchemy + pyodbc
+        conn_str = (
+            "mssql+pyodbc://sa:BIRoccio@192.168.50.243/BENOZZIPROD?driver=SQL+Server"
         )
-        
+        engine = create_engine(conn_str)
+
         # Leggi direttamente la vista
         query = "SELECT * FROM [dbo].[RiepilogoPerMacchinaData]"
-        df = pd.read_sql(query, conn)
-        conn.close()
-        
+        df = pd.read_sql(query, engine)
+
         # --------------------------------------------------------
         # Trasforma le colonne in ore corrette
         for col in ["Work", "Pause", "Alarm", "Down"]:
-            df[col] = df[col] #/ 100_000_000   aggiustamento numerico necessario solo per .csv
+            df[col] = df[col]  # / 100_000_000 se necessario
 
         # --------------------------------------------------------
         df['Anno'] = df['Data'].dt.year
         df['Settimana'] = df['Data'].dt.isocalendar().week
         df['Mese'] = df['Data'].dt.month
-        
+
         return df
-    
+
     except Exception as e:
         st.error(f"Errore nel caricamento dei dati: {e}")
         return pd.DataFrame()  # ritorna un DataFrame vuoto se fallisce
