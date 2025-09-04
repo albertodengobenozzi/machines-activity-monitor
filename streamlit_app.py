@@ -15,27 +15,42 @@ st.set_page_config(
 
 # ------------------------------------------------------------
 # Funzione per caricare i dati dal CSV
+import pyodbc
+import pandas as pd
+
+# ------------------------------------------------------------
+# Funzione per caricare i dati dal SQL Server
 @st.cache_data
 def load_data():
-    file_path = os.path.join(os.path.dirname(__file__), "Machines Activity Monitor.csv")
-    df = pd.read_csv(
-        file_path,
-        sep=";",
-        parse_dates=["Data"],
-        thousands="."   # interpreta i punti come separatori delle migliaia
-    )
+    try:
+        # Connessione al server SQL usando login SQL (sa)
+        conn = pyodbc.connect(
+            'DRIVER={SQL Server};SERVER=192.168.50.243;DATABASE=BENOZZIPROD;UID=sa;PWD=BIRoccio'
+        )
+        
+        # Leggi direttamente la vista
+        query = "SELECT * FROM [dbo].[RiepilogoPerMacchinaData]"
+        df = pd.read_sql(query, conn)
+        conn.close()
+        
+        # --------------------------------------------------------
+        # Trasforma le colonne in ore corrette
+        for col in ["Work", "Pause", "Alarm", "Down"]:
+            df[col] = df[col] #/ 100_000_000   aggiustamento numerico necessario solo per .csv
+
+        # --------------------------------------------------------
+        df['Anno'] = df['Data'].dt.year
+        df['Settimana'] = df['Data'].dt.isocalendar().week
+        df['Mese'] = df['Data'].dt.month
+        
+        return df
     
-    # --------------------------------------------------------
-    # Trasforma le colonne in ore corrette
-    for col in ["Work", "Pause", "Alarm", "Down"]:
-        df[col] = df[col] / 100_000_000  # aggiustamento numerico
+    except Exception as e:
+        st.error(f"Errore nel caricamento dei dati: {e}")
+        return pd.DataFrame()  # ritorna un DataFrame vuoto se fallisce
 
-    # --------------------------------------------------------
-    df['Anno'] = df['Data'].dt.year
-    df['Settimana'] = df['Data'].dt.isocalendar().week
-    df['Mese'] = df['Data'].dt.month
-    return df
-
+# ------------------------------------------------------------
+# Esempio di utilizzo
 df = load_data()
 
 # ------------------------------------------------------------
