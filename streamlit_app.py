@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
-import calendar
 import os
 
 # ------------------------------------------------------------
@@ -12,11 +11,6 @@ st.set_page_config(
     page_icon=':earth_americas:',
     layout="wide"
 )
-
-# ------------------------------------------------------------
-# Funzione per caricare i dati dal CSV
-import pyodbc
-import pandas as pd
 
 # ------------------------------------------------------------
 # Funzione per caricare i dati dal SQL Server
@@ -122,7 +116,6 @@ def filtri_grafico(label, tipo_periodo, df):
     macchine = list(macchine) + list(gruppi_macchine.keys())
 
     # Ordina i nomi macchina numericamente (solo per quelli che hanno un numero)
-    import re
     def estrai_numero(nome):
         match = re.match(r"[A-Za-z]*?(\d+)", nome)
         if match:
@@ -135,7 +128,6 @@ def filtri_grafico(label, tipo_periodo, df):
     # Selectbox mostra i nomi originali
     macchina = st.selectbox(f"Macchina - {label}", macchine_sorted, key=f"macchina_{label}")
 
-    #####oggi = datetime.today()
     if tipo_periodo == "Giorno":
         giorni_disponibili = sorted(df['Data'].dt.date.unique())  # tutti i giorni disponibili nel dataset
 
