@@ -3,6 +3,62 @@ import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 import os
+import socket
+
+# Funzione per recuperare l'IP del client
+def get_client_ip():
+    try:
+        # streamlit runtime context
+        from streamlit.web.server.browser_websocket_handler import BrowserWebSocketHandler
+        from streamlit.web.server.server import Server
+
+        # elenco delle connessioni
+        session_info = Server.get_current()._session_info_by_id
+        for _, si in session_info.items():
+            if isinstance(si.ws, BrowserWebSocketHandler):
+                # "si.ws.request.remote_ip" contiene l'IP del client
+                return si.ws.request.remote_ip
+    except Exception:
+        return None
+
+
+# Mappa IP → macchina di default
+default_macchine_ip = {
+    #"": "1-PFG",
+    #"": "F03",
+    "192.168.50.109": "7-SL25",
+    "192.168.50.118": "8-SL150MC",
+    #"": "T15",
+    #"": "16-ALFA1_IA_FANUC",
+    "192.168.50.70": "18-MCM_CLOCK",
+    "192.168.50.7": "19-INTEGREX_J200",
+    "192.168.50.34": "19-INTEGREX_J200",   # Alberto
+    "192.168.50.199": "19-INTEGREX_J200", # Mirko
+    #"": "T22",
+    "192.168.50.100": "24-MCM_CONCEPT",
+    "192.168.50.119": "26-INTEGREX_J200",
+    "192.168.50.98": "27-INTEGREX_200",
+    "192.168.50.97": "30-LYNX_300M",
+    "192.168.50.113": "31-QTN_200_MSY",
+    "192.168.50.39": "33-VTC800_MAZAK",
+    "192.168.50.106": "34-INTEGREX_I300",
+    "192.168.50.107": "36-DMG_NMV_3000",
+    "192.168.50.122": "66-QTN_200_MSY",
+    "192.168.50.173": "70-PUMA_GT2600LM",
+    "192.168.50.182": "71-INTEGREX",
+    "192.168.50.108": "72-VARIAXIS_J500",
+    "192.168.50.112": "73-VARIAXIS_J500",
+    "192.168.50.5": "77-INTEGREX",
+    "192.168.50.57": "81-MITSUBISHI_MV1200S",
+    "192.168.50.126": "103-DMG_NMV_5000",
+    "192.168.50.56": "104-DMG_NMV_3000",
+    "192.168.50.125": "115-MITSUBISHI_MV1200R",
+    "192.168.50.30": "136_DMG",
+    "192.168.50.110": "158-DMG",
+    "192.168.50.134": "161-MITSUBISHI_MV1200R",
+    None: "19-INTEGREX_J200"              # fallback se non rileva l'IP
+    # aggiungi altri PC con i loro IP
+}
 
 # ------------------------------------------------------------
 # Configurazione pagina
@@ -109,24 +165,61 @@ def filtri_grafico(label, tipo_periodo, df):
     st.subheader(label)
     import re
 
-   # Lista dei nomi macchina originali
+    # Lista dei nomi macchina originali
     macchine = df["DescrMacchina"].unique()
 
     # Aggiungi i gruppi definiti
     macchine = list(macchine) + list(gruppi_macchine.keys())
 
-    # Ordina i nomi macchina numericamente (solo per quelli che hanno un numero)
+    # Ordina i nomi macchina numericamente
     def estrai_numero(nome):
         match = re.match(r"[A-Za-z]*?(\d+)", nome)
-        if match:
-            return int(match.group(1))
-        # Metti in fondo i gruppi o nomi senza numero
-        return 9999
+        return int(match.group(1)) if match else 9999
 
     macchine_sorted = sorted(macchine, key=lambda x: estrai_numero(x))
 
-    # Selectbox mostra i nomi originali
-    macchina = st.selectbox(f"Macchina - {label}", macchine_sorted, key=f"macchina_{label}")
+    # --- Recupera l'IP del PC client ---
+    query_params = st.query_params
+    client_ip_raw = query_params.get("pc", None)  # può essere lista o stringa
+
+    # gestisci entrambi i casi
+    if isinstance(client_ip_raw, list):
+        client_ip = client_ip_raw[0] if client_ip_raw else None
+    else:
+        client_ip = client_ip_raw
+
+    #st.sidebar.write("IP rilevato:", client_ip)  # <-- debug temporaneo per vedere l'IP
+    macchina_default = default_macchine_ip.get(client_ip, None)
+
+    #st.sidebar.write("Tutto query_params:", st.query_params)
+    #st.sidebar.write("client_ip_list:", client_ip_list)
+    #st.sidebar.write("client_ip:", client_ip)
+
+    # Mostra l'IP in basso a destra
+    #st.markdown(
+    #    f"""
+    #    <div style="position: fixed; bottom: 10px; right: 10px; 
+    #                background-color: rgba(255,255,255,0.7); 
+    #                padding: 5px 10px; border-radius: 5px; font-size: 12px;">
+    #        IP rilevato: {client_ip if client_ip else "non rilevato"}
+    #    </div>
+    #    """,
+    #    unsafe_allow_html=True
+    #)
+
+    # --- Selectbox con default personalizzato ---
+    
+    if macchina_default and macchina_default in macchine_sorted:
+        default_index = macchine_sorted.index(macchina_default)
+    else:
+        default_index = 0
+
+    macchina = st.selectbox(
+        f"Macchina - {label}",
+        macchine_sorted,
+        index=default_index,
+        key=f"macchina_{label}"
+    )
 
     if tipo_periodo == "Giorno":
         giorni_disponibili = sorted(df['Data'].dt.date.unique())  # tutti i giorni disponibili nel dataset
@@ -147,61 +240,104 @@ def filtri_grafico(label, tipo_periodo, df):
         end_date = start_date
 
     elif tipo_periodo == "Settimana":
+        # Lista anni disponibili ordinata
+        anni_disponibili = sorted(df['Anno'].unique())
+
+        # Trova l'indice dell'anno corrente
+        anno_corrente = datetime.now().year
+        if anno_corrente in anni_disponibili:
+            default_index_anno = anni_disponibili.index(anno_corrente)
+        else:
+            default_index_anno = 0  # se l'anno corrente non è nei dati
+
+        # Selectbox per l'anno
         anno_sel = st.selectbox(
-            f"Anno - {label}", 
-            df['Anno'].unique(), 
-            index=0, 
+            f"Anno - {label}",
+            anni_disponibili,
+            index=default_index_anno,
             key=f"anno_{label}"
         )
 
+        # Lista settimane disponibili per l'anno selezionato
         settimane_disponibili = sorted(df[df['Anno'] == anno_sel]['Settimana'].unique())
 
-        # Trova la penultima settimana disponibile
-        if len(settimane_disponibili) >= 2:
-            default_index = len(settimane_disponibili) - 2  # penultima
-        else:
-            default_index = 0  # se c'è solo una settimana disponibile
+        # Calcola settimana precedente a quella corrente
+        oggi = datetime.now()
+        anno_corrente_iso, settimana_corrente_iso, _ = oggi.isocalendar()
+        settimana_precedente = settimana_corrente_iso - 1
+        anno_settimana_precedente = anno_corrente_iso
 
+        if settimana_precedente == 0:  # se la settimana corrente è la 1, vai all'ultima settimana dell'anno precedente
+            anno_settimana_precedente -= 1
+            settimana_precedente = datetime(anno_settimana_precedente, 12, 28).isocalendar()[1]  # ultima settimana ISO dell'anno precedente
+
+        # Imposta l'indice della settimana di default se presente nei dati
+        if anno_sel == anno_settimana_precedente and settimana_precedente in settimane_disponibili:
+            default_index_settimana = settimane_disponibili.index(settimana_precedente)
+        else:
+            # Se la settimana precedente non è nei dati, usa l'ultima disponibile
+            default_index_settimana = len(settimane_disponibili) - 1 if settimane_disponibili else 0
+
+        # Selectbox per la settimana
         settimana_sel = st.selectbox(
-            f"Settimana - {label}", 
-            settimane_disponibili, 
-            index=default_index, 
+            f"Settimana - {label}",
+            settimane_disponibili,
+            index=default_index_settimana,
             key=f"settimana_{label}"
         )
 
         # Calcola le date di inizio e fine settimana
-        start_date = pd.to_datetime(f"{anno_sel}-W{settimana_sel}-1", format="%Y-W%W-%w")
-        end_date = start_date + timedelta(days=6)
+        start_date = datetime.fromisocalendar(anno_sel, settimana_sel, 1)  # lunedì
+        end_date = start_date + timedelta(days=6)  # domenica
+
 
     elif tipo_periodo == "Mese":
+        anni_disponibili = sorted(df['Anno'].unique())
+
+        # Trova l'indice dell'anno corrente
+        anno_corrente = datetime.now().year
+        if anno_corrente in anni_disponibili:
+            default_index_anno = anni_disponibili.index(anno_corrente)
+        else:
+            default_index_anno = 0
+
+        # Selectbox per l'anno
         anno_sel = st.selectbox(
             f"Anno - {label}",
-            df['Anno'].unique(),
-            index=0,
+            anni_disponibili,
+            index=default_index_anno,
             key=f"annoM_{label}"
         )
 
+        # Lista mesi disponibili per l'anno selezionato
         mesi_disponibili = sorted(df[df['Anno'] == anno_sel]['Mese'].unique())
 
-        # Trova l'indice del penultimo mese disponibile
-        if len(mesi_disponibili) >= 2:
-            default_index = len(mesi_disponibili) - 2  # penultimo mese
-        else:
-            default_index = 0  # se c'è solo un mese disponibile
+        # Trova il mese precedente a quello corrente
+        mese_corrente = datetime.now().month
+        mese_precedente = mese_corrente - 1 if mese_corrente > 1 else 12
 
+        if mese_precedente in mesi_disponibili:
+            default_index_mese = mesi_disponibili.index(mese_precedente)
+        else:
+            # Se il mese precedente non è nei dati, prendi l'ultimo disponibile
+            default_index_mese = len(mesi_disponibili) - 1
+
+        # Selectbox per il mese
         mese_sel = st.selectbox(
             f"Mese - {label}",
             mesi_disponibili,
             format_func=lambda x: mesi_nome[x],
-            index=default_index,
+            index=default_index_mese,
             key=f"mese_{label}"
         )
 
+        # Calcola inizio e fine mese
         start_date = pd.to_datetime(f"{anno_sel}-{mese_sel:02d}-01")
         if mese_sel == 12:
             end_date = pd.to_datetime(f"{anno_sel+1}-01-01") - timedelta(days=1)
         else:
             end_date = pd.to_datetime(f"{anno_sel}-{mese_sel+1:02d}-01") - timedelta(days=1)
+
 
     elif tipo_periodo == "Periodo personalizzato":
         giorni_disponibili = sorted(df['Data'].dt.date.unique())
