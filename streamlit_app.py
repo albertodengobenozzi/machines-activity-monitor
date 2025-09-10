@@ -21,7 +21,6 @@ def get_client_ip():
     except Exception:
         return None
 
-
 # Mappa IP → macchina di default
 default_macchine_ip = {
     #"": "1-PFG",
@@ -70,7 +69,7 @@ st.set_page_config(
 
 # ------------------------------------------------------------
 # Funzione per caricare i dati dal SQL Server
-@st.cache_data
+@st.cache_data(ttl=900)
 def load_data():
     try:
         from sqlalchemy import create_engine
@@ -178,7 +177,7 @@ def filtri_grafico(label, tipo_periodo, df):
 
     macchine_sorted = sorted(macchine, key=lambda x: estrai_numero(x))
 
-    # --- Recupera l'IP del PC client ---
+    # --- Recupera l'IP del PC client da link personalizzato per ogni macchina---
     query_params = st.query_params
     client_ip_raw = query_params.get("pc", None)  # può essere lista o stringa
 
@@ -188,26 +187,7 @@ def filtri_grafico(label, tipo_periodo, df):
     else:
         client_ip = client_ip_raw
 
-    #st.sidebar.write("IP rilevato:", client_ip)  # <-- debug temporaneo per vedere l'IP
     macchina_default = default_macchine_ip.get(client_ip, None)
-
-    #st.sidebar.write("Tutto query_params:", st.query_params)
-    #st.sidebar.write("client_ip_list:", client_ip_list)
-    #st.sidebar.write("client_ip:", client_ip)
-
-    # Mostra l'IP in basso a destra
-    #st.markdown(
-    #    f"""
-    #    <div style="position: fixed; bottom: 10px; right: 10px; 
-    #                background-color: rgba(255,255,255,0.7); 
-    #                padding: 5px 10px; border-radius: 5px; font-size: 12px;">
-    #        IP rilevato: {client_ip if client_ip else "non rilevato"}
-    #    </div>
-    #    """,
-    #    unsafe_allow_html=True
-    #)
-
-    # --- Selectbox con default personalizzato ---
     
     if macchina_default and macchina_default in macchine_sorted:
         default_index = macchine_sorted.index(macchina_default)
@@ -290,7 +270,6 @@ def filtri_grafico(label, tipo_periodo, df):
         start_date = datetime.fromisocalendar(anno_sel, settimana_sel, 1)  # lunedì
         end_date = start_date + timedelta(days=6)  # domenica
 
-
     elif tipo_periodo == "Mese":
         anni_disponibili = sorted(df['Anno'].unique())
 
@@ -337,7 +316,6 @@ def filtri_grafico(label, tipo_periodo, df):
             end_date = pd.to_datetime(f"{anno_sel+1}-01-01") - timedelta(days=1)
         else:
             end_date = pd.to_datetime(f"{anno_sel}-{mese_sel+1:02d}-01") - timedelta(days=1)
-
 
     elif tipo_periodo == "Periodo personalizzato":
         giorni_disponibili = sorted(df['Data'].dt.date.unique())
