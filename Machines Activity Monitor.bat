@@ -1,6 +1,6 @@
 @echo off
 REM Vai nella cartella del progetto
-cd C:\Users\ALBDEN\Documents\GitHub\activity-monitor-19-integrex-j200
+cd C:\Users\ALBDEN\Documents\GitHub\machines-activity-monitor
 
 REM Chiudi eventuali processi Streamlit rimasti appesi sulla porta 8501
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8501') do taskkill /F /PID %%a >nul 2>&1
