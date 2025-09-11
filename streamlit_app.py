@@ -4,6 +4,12 @@ from datetime import datetime, timedelta
 import plotly.express as px
 import os
 import socket
+from streamlit_autorefresh import st_autorefresh
+
+
+# ------------------------------------------------------------
+# Aggiorna ogni 15 minuti
+st_autorefresh(interval=900*1000, key="dataframe_refresh")
 
 # Funzione per recuperare l'IP del client
 def get_client_ip():
@@ -58,6 +64,59 @@ default_macchine_ip = {
     None: "19-INTEGREX_J200"              # fallback se non rileva l'IP
     # aggiungi altri PC con i loro IP
 }
+
+# Target minimi per macchina (valori base)
+target_macchine = {
+    "1-PFG": 7.20,
+    "F03": 8.00,
+    "7-SL25": 5.40,
+    "8-SL150MC": 5.40,
+    "T15":8.00,
+    "16-ALFA1_IA_FANUC":8.10,
+    "18-MCM_CLOCK":13.55,
+    "19-INTEGREX_J200": 11.75,
+    "T22":8,
+    "24-MCM_CONCEPT": 19.85,
+    "26-INTEGREX_J200":10.80,
+    "27-INTEGREX_200":9.90,
+    "30-LYNX_300M":7.20,
+    "31-QTN_200_MSY":10.80,
+    "33-VTC800_MAZAK":7.20,
+    "34-INTEGREX_I300":12.65,
+    "36-DMG_NMV_3000":18.05,
+    "66-QTN_200_MSY":11.75,
+    "70-PUMA_GT2600LM":5.4,
+    "71-INTEGREX":10.80,
+    "72-VARIAXIS_J500":9.90,
+    "73-VARIAXIS_J500":9,
+    "77-INTEGREX":10.80,
+    "81-MITSUBISHI_MV1200S":11.75,
+    "103-DMG_NMV_5000":9,
+    "104-DMG_NMV_3000":18.05,
+    "115-MITSUBISHI_MV1200R":9,
+    "136_DMG":18.05,
+    "158-DMG":18.05,
+    "161-MITSUBISHI_MV1200R":8,
+    # aggiungi altre macchine qui...
+}
+
+def get_min_max(macchina, tipo_periodo, start_date, end_date):
+    giorni_periodo = (end_date - start_date).days + 1
+    max_barra = 24 * giorni_periodo
+
+    # se ho un target personalizzato da codice, lo uso
+    if macchina in target_macchine:
+        minimo = target_macchine[macchina] * giorni_periodo
+    else:
+        # altrimenti applico la regola generale
+        if tipo_periodo == "Giorno":
+            minimo = 12
+        elif tipo_periodo == "Settimana":
+            minimo = 84
+        else:  # mese o periodo personalizzato
+            minimo = 12 * giorni_periodo
+
+    return minimo, max_barra
 
 # ------------------------------------------------------------
 # Configurazione pagina
@@ -385,9 +444,52 @@ def draw_pie(sums, title, key):
     fig.update_traces(
         textinfo='label+percent+value',
         texttemplate="%{label}: %{value:.2f} (%{percent})",
-        textposition='inside'
+        textposition='inside',
+        hoverinfo="skip",        # <-- disattiva i tooltip
+        hovertemplate=None       # <-- ulteriore sicurezza
     )
-    fig.update_layout(width=1000, height=800, legend=dict(orientation="h"))
+
+    fig.update_layout(
+        width=None,
+        height=550,
+        legend=dict(orientation="h", y=-0.2)
+    )
+
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
+def draw_barra(macchina, tipo_periodo, start_date, end_date, work_value, key=None):
+    minimo, max_barra = get_min_max(macchina, tipo_periodo, start_date, end_date)
+
+    import plotly.graph_objects as go
+    fig = go.Figure()
+
+    # Colore: verde se lavoro >= minimo, rosso se lavoro < minimo
+    colore = "green" if work_value >= minimo else "red"
+
+    # barra con lavoro effettivo
+    fig.add_trace(go.Bar(
+        x=[work_value],
+        y=["Lavoro"],
+        orientation='h',
+        marker=dict(color=colore),
+        name="Lavoro"
+    ))
+
+    # linea minima
+    fig.add_vline(
+        x=minimo,
+        line=dict(color="blue", dash="dash"),  # linea minima evidenziata in blu
+        annotation_text=f"Min {minimo:.2f}h",  # <-- due cifre decimali
+        annotation_position="top"
+    )
+
+    fig.update_layout(
+        xaxis=dict(range=[0, max_barra], title="Ore"),
+        yaxis=dict(showticklabels=False),
+        height=150,
+        margin=dict(l=20, r=20, t=20, b=20)
+    )
+
     st.plotly_chart(fig, use_container_width=True, key=key)
 
 # ------------------------------------------------------------
@@ -409,7 +511,11 @@ if not modalita_confronto:
         else:
             sums = df_filtered[["Work", "Pause", "Alarm", "Down"]].sum()
             sums.index = [translations["it"][col] for col in sums.index]
-            draw_pie(sums, f"Macchina {macchina} - Periodo selezionato", key=f"{macchina}_{tipo_periodo}")
+            col_pie, col_bar = st.columns([2,1])
+            with col_pie:
+                draw_pie(sums, f"Macchina {macchina} - Periodo selezionato", key=f"{macchina}_{tipo_periodo}")
+            with col_bar:
+                draw_barra(macchina, tipo_periodo, start_date, end_date, sums["Lavoro"], key=f"bar_{macchina}_{tipo_periodo}")
 
 else:
     # confronto due grafici affiancati
@@ -428,7 +534,11 @@ else:
             else:
                 sums1 = df1[["Work", "Pause", "Alarm", "Down"]].sum()
                 sums1.index = [translations["it"][col] for col in sums1.index]
-                draw_pie(sums1, f"Macchina {macchina1} - Periodo selezionato", key=f"{macchina1}_{tipo_periodo}_1")
+                col_pie, col_bar = st.columns([2,1])
+                with col_pie:
+                    draw_pie(sums1, f"Macchina {macchina1} - Periodo selezionato", key=f"pie1_{macchina1}_{tipo_periodo}")
+                with col_bar:
+                    draw_barra(macchina1, tipo_periodo, start1, end1, sums1["Lavoro"],key=f"bar1_{macchina1}_{tipo_periodo}")
 
     with col2:
         macchina2, start2, end2 = filtri_grafico("Grafico 2", tipo_periodo, df)
@@ -443,4 +553,16 @@ else:
             else:
                 sums2 = df2[["Work", "Pause", "Alarm", "Down"]].sum()
                 sums2.index = [translations["it"][col] for col in sums2.index]
-                draw_pie(sums2, f"Macchina {macchina2} - Periodo selezionato", key=f"{macchina2}_{tipo_periodo}_2")
+                col_pie, col_bar = st.columns([2,1])
+                with col_pie:
+                    draw_pie(sums2, f"Macchina {macchina2} - Periodo selezionato", key=f"pie2_{macchina2}_{tipo_periodo}")
+                with col_bar:
+                    draw_barra(macchina2, tipo_periodo, start2, end2, sums2["Lavoro"],key=f"bar2_{macchina2}_{tipo_periodo}")
+
+# ------------------------------------------------------------
+# Data/Ora ultimo aggiornamento
+st.markdown(
+    f"<div style='position: fixed; bottom: 10px; right: 10px; color: gray; font-size: 12px;'>"
+    f"Aggiornato in data {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+    f"</div>", unsafe_allow_html=True
+)
