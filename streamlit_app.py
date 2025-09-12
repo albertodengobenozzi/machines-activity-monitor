@@ -127,8 +127,9 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# Funzione per caricare i dati dal SQL Server
-@st.cache_data(ttl=900)
+# Funzione per caricare i dati dal SQL Server 
+@st.cache_data(ttl=60) # tempo di vita della cache; il risultato viene considerato valido per xxx secondi.
+# Dopo xxx secondi la cache scade, quindi la funzione verrà eseguita di nuovo per aggiornare i dati.
 def load_data():
     try:
         from sqlalchemy import create_engine
