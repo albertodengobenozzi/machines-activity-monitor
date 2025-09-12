@@ -96,7 +96,7 @@ target_macchine = {
     "115-MITSUBISHI_MV1200R":9,
     "136_DMG":18.05,
     "158-DMG":18.05,
-    "161-MITSUBISHI_MV1200R":8,
+    "161-MITSUBISHI_MV1200R":11.75,
     # aggiungi altre macchine qui...
 }
 
@@ -484,12 +484,21 @@ def draw_barra(macchina, tipo_periodo, start_date, end_date, work_value, key=Non
         annotation_position="top"
     )
 
+    tickvals = [max_barra * i/4 for i in range(1, 5)]  # 1/4, 2/4, 3/4, max
+    tickvals = [round(v, 2) for v in tickvals]         # se vuoi due decimali
+
     fig.update_layout(
-        xaxis=dict(range=[0, max_barra], title="Ore"),
+        xaxis=dict(
+            range=[0, max_barra],
+            title="Ore",
+            tickmode="array",
+            tickvals=tickvals
+        ),
         yaxis=dict(showticklabels=False),
         height=150,
         margin=dict(l=20, r=20, t=20, b=20)
     )
+
 
     st.plotly_chart(fig, use_container_width=True, key=key)
 
