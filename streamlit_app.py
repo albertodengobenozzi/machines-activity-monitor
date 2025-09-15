@@ -102,19 +102,40 @@ target_macchine = {
 
 def get_min_max(macchina, tipo_periodo, start_date, end_date):
     giorni_periodo = (end_date - start_date).days + 1
-    max_barra = 24 * giorni_periodo
 
-    # se ho un target personalizzato da codice, lo uso
-    if macchina in target_macchine:
-        minimo = target_macchine[macchina] * giorni_periodo
+    # Calcolo max_barra sempre come prima
+    if macchina in gruppi_macchine:
+        # max per gruppo: 24 ore * giorni * numero macchine
+        max_barra = 24 * giorni_periodo * len(gruppi_macchine[macchina])
     else:
-        # altrimenti applico la regola generale
-        if tipo_periodo == "Giorno":
-            minimo = 12
-        elif tipo_periodo == "Settimana":
-            minimo = 84
-        else:  # mese o periodo personalizzato
-            minimo = 12 * giorni_periodo
+        max_barra = 24 * giorni_periodo
+
+    # Calcolo minimo
+    if macchina in gruppi_macchine:
+        # somma dei target di tutte le macchine del gruppo
+        minimo = 0
+        for m in gruppi_macchine[macchina]:
+            if m in target_macchine:
+                minimo += target_macchine[m] * giorni_periodo
+            else:
+                # fallback alla regola generale per singola macchina
+                if tipo_periodo == "Giorno":
+                    minimo += 12
+                elif tipo_periodo == "Settimana":
+                    minimo += 84
+                else:
+                    minimo += 12 * giorni_periodo
+    else:
+        # singola macchina
+        if macchina in target_macchine:
+            minimo = target_macchine[macchina] * giorni_periodo
+        else:
+            if tipo_periodo == "Giorno":
+                minimo = 12
+            elif tipo_periodo == "Settimana":
+                minimo = 84
+            else:
+                minimo = 12 * giorni_periodo
 
     return minimo, max_barra
 
@@ -128,7 +149,7 @@ st.set_page_config(
 
 # ------------------------------------------------------------
 # Funzione per caricare i dati dal SQL Server 
-@st.cache_data(ttl=60) # tempo di vita della cache; il risultato viene considerato valido per xxx secondi.
+@st.cache_data(ttl=600) # tempo di vita della cache; il risultato viene considerato valido per xxx secondi.
 # Dopo xxx secondi la cache scade, quindi la funzione verrà eseguita di nuovo per aggiornare i dati.
 def load_data():
     try:
