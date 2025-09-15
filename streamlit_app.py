@@ -6,27 +6,6 @@ import os
 import socket
 from streamlit_autorefresh import st_autorefresh
 
-
-# ------------------------------------------------------------
-# Aggiorna ogni 15 minuti
-st_autorefresh(interval=900*1000, key="dataframe_refresh")
-
-# Funzione per recuperare l'IP del client
-def get_client_ip():
-    try:
-        # streamlit runtime context
-        from streamlit.web.server.browser_websocket_handler import BrowserWebSocketHandler
-        from streamlit.web.server.server import Server
-
-        # elenco delle connessioni
-        session_info = Server.get_current()._session_info_by_id
-        for _, si in session_info.items():
-            if isinstance(si.ws, BrowserWebSocketHandler):
-                # "si.ws.request.remote_ip" contiene l'IP del client
-                return si.ws.request.remote_ip
-    except Exception:
-        return None
-
 # Mappa IP → macchina di default
 default_macchine_ip = {
     #"": "1-PFG",
@@ -67,38 +46,96 @@ default_macchine_ip = {
 
 # Target minimi per macchina (valori base)
 target_macchine = {
-    "1-PFG": 7.20,
+    "1-PFG": 8.00,
     "F03": 8.00,
-    "7-SL25": 5.40,
-    "8-SL150MC": 5.40,
-    "T15":8.00,
-    "16-ALFA1_IA_FANUC":8.10,
-    "18-MCM_CLOCK":13.55,
-    "19-INTEGREX_J200": 11.75,
-    "T22":8,
-    "24-MCM_CONCEPT": 19.85,
-    "26-INTEGREX_J200":10.80,
-    "27-INTEGREX_200":9.90,
-    "30-LYNX_300M":7.20,
-    "31-QTN_200_MSY":10.80,
-    "33-VTC800_MAZAK":7.20,
-    "34-INTEGREX_I300":12.65,
-    "36-DMG_NMV_3000":18.05,
-    "66-QTN_200_MSY":11.75,
-    "70-PUMA_GT2600LM":5.4,
-    "71-INTEGREX":10.80,
-    "72-VARIAXIS_J500":9.90,
-    "73-VARIAXIS_J500":9,
-    "77-INTEGREX":10.80,
-    "81-MITSUBISHI_MV1200S":11.75,
-    "103-DMG_NMV_5000":9,
-    "104-DMG_NMV_3000":18.05,
-    "115-MITSUBISHI_MV1200R":9,
-    "136_DMG":18.05,
-    "158-DMG":18.05,
-    "161-MITSUBISHI_MV1200R":11.75,
+    "7-SL25": 6.00,
+    "8-SL150MC": 6.00,
+    "T15":14.00,
+    "16-ALFA1_IA_FANUC":9.00,
+    "18-MCM_CLOCK":15.00,
+    "19-INTEGREX_J200": 13.00,
+    "T22":14.00,
+    "24-MCM_CONCEPT": 22.00,
+    "26-INTEGREX_J200":12.00,
+    "27-INTEGREX_200":11.00,
+    "30-LYNX_300M":8.00,
+    "31-QTN_200_MSY":12.00,
+    "33-VTC800_MAZAK":8.00,
+    "34-INTEGREX_I300":14.00,
+    "36-DMG_NMV_3000":20.00,
+    "66-QTN_200_MSY":13.00,
+    "70-PUMA_GT2600LM":6.00,
+    "71-INTEGREX":12.00,
+    "72-VARIAXIS_J500":11.00,
+    "73-VARIAXIS_J500":10.00,
+    "77-INTEGREX":12.00,
+    "81-MITSUBISHI_MV1200S":13.00,
+    "103-DMG_NMV_5000":10.00,
+    "104-DMG_NMV_3000":20.00,
+    "115-MITSUBISHI_MV1200R":10.00,
+    "136_DMG":20.00,
+    "158-DMG":20.00,
+    "161-MITSUBISHI_MV1200R":13.00,
     # aggiungi altre macchine qui...
 }
+
+# ------------------------------------------------------------
+# Gruppi di macchine per macro-selezioni
+gruppi_macchine = {
+    "FRESE ITALIA": [
+        "1-PFG", "18-MCM_CLOCK", "24-MCM_CONCEPT", "33-VTC800_MAZAK",
+        "36-DMG_NMV_3000", "72-VARIAXIS_J500", "73-VARIAXIS_J500",
+        "103-DMG_NMV_5000", "104-DMG_NMV_3000", "136_DMG", "158-DMG"
+    ],
+    "TORNI ITALIA": [
+        "7-SL25", "8-SL150MC", "19-INTEGREX_J200", "26-INTEGREX_J200",
+        "27-INTEGREX_200", "30-LYNX_300M", "31-QTN_200_MSY", "34-INTEGREX_I300",
+        "66-QTN_200_MSY", "70-PUMA_GT2600LM", "71-INTEGREX", "77-INTEGREX"
+    ],
+    "ELETTROEROSIONE ITALIA": [
+        "16-ALFA1_IA_FANUC", "81-MITSUBISHI_MV1200S", 
+        "115-MITSUBISHI_MV1200R", "161-MITSUBISHI_MV1200R"
+    ],
+    "TUTTE ITALIA": [
+        "1-PFG", "7-SL25", "8-SL150MC", "16-ALFA1_IA_FANUC", "18-MCM_CLOCK",
+        "19-INTEGREX_J200", "24-MCM_CONCEPT", "26-INTEGREX_J200", "27-INTEGREX_200",
+        "33-VTC800_MAZAK", "103-DMG_NMV_5000", "30-LYNX_300M", "31-QTN_200_MSY",
+        "34-INTEGREX_I300", "36-DMG_NMV_3000", "66-QTN_200_MSY", "70-PUMA_GT2600LM",
+        "71-INTEGREX", "72-VARIAXIS_J500", "73-VARIAXIS_J500", "77-INTEGREX",
+        "81-MITSUBISHI_MV1200S", "104-DMG_NMV_3000", "115-MITSUBISHI_MV1200R",
+        "136_DMG", "158-DMG", "161-MITSUBISHI_MV1200R"
+    ],
+    "FRESE TUNISIA": ["F03"],
+    "TORNI TUNISIA": ["T15", "T22"],
+    "TUTTE TUNISIA": ["F03", "T15", "T22"]
+}
+
+mesi_nome = {
+    1: "Gennaio", 2: "Febbraio", 3: "Marzo", 4: "Aprile",
+    5: "Maggio", 6: "Giugno", 7: "Luglio", 8: "Agosto",
+    9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre"
+}
+
+
+# ------------------------------------------------------------
+# Aggiorna ogni 15 minuti
+st_autorefresh(interval=900*1000, key="dataframe_refresh")
+
+# Funzione per recuperare l'IP del client
+def get_client_ip():
+    try:
+        # streamlit runtime context
+        from streamlit.web.server.browser_websocket_handler import BrowserWebSocketHandler
+        from streamlit.web.server.server import Server
+
+        # elenco delle connessioni
+        session_info = Server.get_current()._session_info_by_id
+        for _, si in session_info.items():
+            if isinstance(si.ws, BrowserWebSocketHandler):
+                # "si.ws.request.remote_ip" contiene l'IP del client
+                return si.ws.request.remote_ip
+    except Exception:
+        return None
 
 def get_min_max(macchina, tipo_periodo, start_date, end_date):
     giorni_periodo = (end_date - start_date).days + 1
@@ -190,43 +227,6 @@ df = load_data()
 translations = {
     "it": {"Work": "Lavoro", "Pause": "Pausa", "Alarm": "Allarme", "Down": "Spenta"},
     "en": {"Work": "Work", "Pause": "Pause", "Alarm": "Alarm", "Down": "Down"},
-}
-
-# ------------------------------------------------------------
-# Gruppi di macchine per macro-selezioni
-gruppi_macchine = {
-    "FRESE ITALIA": [
-        "1-PFG", "18-MCM_CLOCK", "24-MCM_CONCEPT", "33-VTC800_MAZAK",
-        "36-DMG_NMV_3000", "72-VARIAXIS_J500", "73-VARIAXIS_J500",
-        "103-DMG_NMV_5000", "104-DMG_NMV_3000", "136_DMG", "158-DMG"
-    ],
-    "TORNI ITALIA": [
-        "7-SL25", "8-SL150MC", "19-INTEGREX_J200", "26-INTEGREX_J200",
-        "27-INTEGREX_200", "30-LYNX_300M", "31-QTN_200_MSY", "34-INTEGREX_I300",
-        "66-QTN_200_MSY", "70-PUMA_GT2600LM", "71-INTEGREX", "77-INTEGREX"
-    ],
-    "ELETTROEROSIONE ITALIA": [
-        "16-ALFA1_IA_FANUC", "81-MITSUBISHI_MV1200S", 
-        "115-MITSUBISHI_MV1200R", "161-MITSUBISHI_MV1200R"
-    ],
-    "TUTTE ITALIA": [
-        "1-PFG", "7-SL25", "8-SL150MC", "16-ALFA1_IA_FANUC", "18-MCM_CLOCK",
-        "19-INTEGREX_J200", "24-MCM_CONCEPT", "26-INTEGREX_J200", "27-INTEGREX_200",
-        "33-VTC800_MAZAK", "103-DMG_NMV_5000", "30-LYNX_300M", "31-QTN_200_MSY",
-        "34-INTEGREX_I300", "36-DMG_NMV_3000", "66-QTN_200_MSY", "70-PUMA_GT2600LM",
-        "71-INTEGREX", "72-VARIAXIS_J500", "73-VARIAXIS_J500", "77-INTEGREX",
-        "81-MITSUBISHI_MV1200S", "104-DMG_NMV_3000", "115-MITSUBISHI_MV1200R",
-        "136_DMG", "158-DMG", "161-MITSUBISHI_MV1200R"
-    ],
-    "FRESE TUNISIA": ["F03"],
-    "TORNI TUNISIA": ["T15", "T22"],
-    "TUTTE TUNISIA": ["F03", "T15", "T22"]
-}
-
-mesi_nome = {
-    1: "Gennaio", 2: "Febbraio", 3: "Marzo", 4: "Aprile",
-    5: "Maggio", 6: "Giugno", 7: "Luglio", 8: "Agosto",
-    9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre"
 }
 
 # ------------------------------------------------------------
