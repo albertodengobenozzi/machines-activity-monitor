@@ -523,6 +523,72 @@ def draw_barra(macchina, tipo_periodo, start_date, end_date, work_value, key=Non
 
     st.plotly_chart(fig, use_container_width=True, key=key)
 
+def draw_group_bar(df, gruppo, tipo_periodo, start_date, end_date, key=None):
+    import plotly.graph_objects as go
+    import re
+    import pandas as pd
+    import streamlit as st
+
+    # Macchine che fanno parte del gruppo
+    machines_in_group = gruppi_macchine[gruppo]
+
+    # Filtra i dati solo per le macchine del gruppo e il periodo selezionato
+    df_group = df[df["DescrMacchina"].isin(machines_in_group)]
+    df_group = df_group[(df_group["Data"] >= start_date) & (df_group["Data"] <= end_date)]
+
+    if df_group.empty:
+        st.warning(f"Nessun dato disponibile per il gruppo {gruppo} in questo periodo")
+        return
+
+    # Somma i valori per ciascuna macchina
+    df_sum = df_group.groupby("DescrMacchina")[["Work","Pause","Alarm","Down"]].sum()
+
+    # --- Aggiungi le macchine mancanti ---
+    giorni_periodo = (end_date - start_date).days + 1
+    max_barra = 24 * giorni_periodo
+
+    for m in machines_in_group:
+        if m not in df_sum.index:
+            # macchina assente → aggiungo come spenta
+            df_sum.loc[m] = {"Work":0, "Pause":0, "Alarm":0, "Down":max_barra}
+
+    # --- Ordina le macchine numericamente ---
+    def estrai_numero(nome):
+        match = re.match(r"[A-Za-z]*?(\d+)", nome)
+        return int(match.group(1)) if match else 9999
+
+    df_sum = df_sum.loc[sorted(df_sum.index, key=lambda x: estrai_numero(x))]
+
+    # Traduzione nomi colonne
+    df_sum.rename(columns={
+        "Work":"Lavoro",
+        "Pause":"Pausa",
+        "Alarm":"Allarme",
+        "Down":"Spenta"
+    }, inplace=True)
+
+    # Creazione grafico stacked
+    fig = go.Figure()
+    colori = {"Lavoro":"green","Pausa":"yellow","Allarme":"red","Spenta":"gray"}
+
+    for col in ["Lavoro","Pausa","Allarme","Spenta"]:
+        fig.add_trace(go.Bar(
+            x=df_sum.index,
+            y=df_sum[col],
+            name=col,
+            marker_color=colori[col]
+        ))
+
+    fig.update_layout(
+        barmode='stack',
+        title=f"Gruppo {gruppo} - Ore per macchina",
+        yaxis=dict(title="Ore", range=[0, max_barra]),
+        xaxis=dict(title="Macchine"),
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True, key=key)
+
 # ------------------------------------------------------------
 # Modalità confronto
 modalita_confronto = st.checkbox("Attiva modalità confronto")
@@ -542,21 +608,26 @@ if not modalita_confronto:
         else:
             sums = df_filtered[["Work", "Pause", "Alarm", "Down"]].sum()
             sums.index = [translations["it"][col] for col in sums.index]
+
             col_pie, col_bar = st.columns([2,1])
             with col_pie:
                 draw_pie(sums, f"Macchina {macchina} - Periodo selezionato", key=f"{macchina}_{tipo_periodo}")
             with col_bar:
                 draw_barra(macchina, tipo_periodo, start_date, end_date, sums["Lavoro"], key=f"bar_{macchina}_{tipo_periodo}")
 
+            # --- GRAFICO COLONNE SOLO PER GRUPPI ---
+            if macchina in gruppi_macchine:
+                draw_group_bar(df, macchina, tipo_periodo, start_date, end_date, key=f"groupbar_{macchina}")
+
 else:
     # confronto due grafici affiancati
     col1, col2 = st.columns(2)
 
+    # ---- COL1 ----
     with col1:
         macchina1, start1, end1 = filtri_grafico("Grafico 1", tipo_periodo, df)
         if start1 is not None and end1 is not None:
             df1 = filter_data(df, macchina1, start1, end1)
-
             if df1.empty:
                 if tipo_periodo == "Giorno":
                     st.warning("Dati non presenti in questo giorno")
@@ -565,30 +636,40 @@ else:
             else:
                 sums1 = df1[["Work", "Pause", "Alarm", "Down"]].sum()
                 sums1.index = [translations["it"][col] for col in sums1.index]
+
                 col_pie, col_bar = st.columns([2,1])
                 with col_pie:
-                    draw_pie(sums1, f"Macchina {macchina1} - Periodo selezionato", key=f"pie1_{macchina1}_{tipo_periodo}")
+                    draw_pie(sums1, f"{macchina1} - Periodo selezionato", key=f"pie1_{macchina1}_{tipo_periodo}")
                 with col_bar:
-                    draw_barra(macchina1, tipo_periodo, start1, end1, sums1["Lavoro"],key=f"bar1_{macchina1}_{tipo_periodo}")
+                    draw_barra(macchina1, tipo_periodo, start1, end1, sums1["Lavoro"], key=f"bar1_{macchina1}_{tipo_periodo}")
 
+                # --- GRAFICO COLONNE SOLO PER GRUPPI ---
+                if macchina1 in gruppi_macchine:
+                    draw_group_bar(df, macchina1, tipo_periodo, start1, end1, key=f"groupbar1_{macchina1}")
+
+    # ---- COL2 ----
     with col2:
         macchina2, start2, end2 = filtri_grafico("Grafico 2", tipo_periodo, df)
         if start2 is not None and end2 is not None:
             df2 = filter_data(df, macchina2, start2, end2)
-
             if df2.empty:
                 if tipo_periodo == "Giorno":
-                    st.warning("Dati non presenti per questo giorno")
+                    st.warning("Dati non presenti in questo giorno")
                 else:
-                    st.warning("Dati non presenti per questo periodo")
+                    st.warning("Dati non presenti in questo periodo")
             else:
                 sums2 = df2[["Work", "Pause", "Alarm", "Down"]].sum()
                 sums2.index = [translations["it"][col] for col in sums2.index]
+
                 col_pie, col_bar = st.columns([2,1])
                 with col_pie:
-                    draw_pie(sums2, f"Macchina {macchina2} - Periodo selezionato", key=f"pie2_{macchina2}_{tipo_periodo}")
+                    draw_pie(sums2, f"{macchina2} - Periodo selezionato", key=f"pie2_{macchina2}_{tipo_periodo}")
                 with col_bar:
-                    draw_barra(macchina2, tipo_periodo, start2, end2, sums2["Lavoro"],key=f"bar2_{macchina2}_{tipo_periodo}")
+                    draw_barra(macchina2, tipo_periodo, start2, end2, sums2["Lavoro"], key=f"bar2_{macchina2}_{tipo_periodo}")
+
+                # --- GRAFICO COLONNE SOLO PER GRUPPI ---
+                if macchina2 in gruppi_macchine:
+                    draw_group_bar(df, macchina2, tipo_periodo, start2, end2, key=f"groupbar2_{macchina2}")
 
 # ------------------------------------------------------------
 # Data/Ora ultimo aggiornamento
