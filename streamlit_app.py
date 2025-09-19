@@ -549,7 +549,6 @@ def draw_group_bar(df, gruppo, tipo_periodo, start_date, end_date, key=None):
 
     for m in machines_in_group:
         if m not in df_sum.index:
-            # macchina assente → aggiungo come spenta
             df_sum.loc[m] = {"Work":0, "Pause":0, "Alarm":0, "Down":max_barra}
 
     # --- Ordina le macchine numericamente ---
@@ -577,6 +576,27 @@ def draw_group_bar(df, gruppo, tipo_periodo, start_date, end_date, key=None):
             y=df_sum[col],
             name=col,
             marker_color=colori[col]
+        ))
+
+    # --- Aggiungo il minimo per ogni macchina ---
+    for macchina in df_sum.index:
+        minimo, _ = get_min_max(macchina, tipo_periodo, start_date, end_date)
+        fig.add_trace(go.Scatter(
+            x=[macchina, macchina],
+            y=[0, minimo],
+            mode="markers",
+            line=dict(color="orange", dash="solid"),
+            showlegend=False
+        ))
+        # testo con etichetta del minimo
+        fig.add_trace(go.Scatter(
+            x=[macchina],
+            y=[minimo],
+            text=[f"Min {minimo:.2f}h"],
+            mode="text",
+            textposition="top center",
+            textfont=dict(color="orange"),   # 👈 colore scritta
+            showlegend=False
         ))
 
     fig.update_layout(
