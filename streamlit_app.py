@@ -4,118 +4,71 @@ from datetime import datetime, timedelta
 import plotly.express as px
 import os
 import socket
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 from streamlit_autorefresh import st_autorefresh
 
-# Mappa IP → macchina di default
-default_macchine_ip = {
-    #"": "1-PFG",
-    #"": "F03",
-    "192.168.50.109": "7-SL25",
-    "192.168.50.118": "8-SL150MC",
-    #"": "T15",
-    #"": "16-ALFA1_IA_FANUC",
-    "192.168.50.70": "18-MCM_CLOCK",
-    "192.168.50.7": "19-INTEGREX_J200",
-    "192.168.50.34": "19-INTEGREX_J200",   # Alberto
-    "192.168.50.199": "19-INTEGREX_J200", # Mirko
-    #"": "T22",
-    "192.168.50.100": "24-MCM_CONCEPT",
-    "192.168.50.119": "26-INTEGREX_J200",
-    "192.168.50.98": "27-INTEGREX_200",
-    "192.168.50.97": "30-LYNX_300M",
-    "192.168.50.113": "31-QTN_200_MSY",
-    "192.168.50.39": "33-VTC800_MAZAK",
-    "192.168.50.106": "34-INTEGREX_I300",
-    "192.168.50.107": "36-DMG_NMV_3000",
-    "192.168.50.122": "66-QTN_200_MSY",
-    "192.168.50.173": "70-PUMA_GT2600LM",
-    "192.168.50.182": "71-INTEGREX",
-    "192.168.50.108": "72-VARIAXIS_J500",
-    "192.168.50.112": "73-VARIAXIS_J500",
-    "192.168.50.5": "77-INTEGREX",
-    "192.168.50.57": "81-MITSUBISHI_MV1200S",
-    "192.168.50.126": "103-DMG_NMV_5000",
-    "192.168.50.56": "104-DMG_NMV_3000",
-    "192.168.50.125": "115-MITSUBISHI_MV1200R",
-    "192.168.50.30": "136_DMG",
-    "192.168.50.110": "158-DMG",
-    "192.168.50.134": "161-MITSUBISHI_MV1200R",
-    None: "19-INTEGREX_J200"              # fallback se non rileva l'IP
-    # aggiungi altri PC con i loro IP
-}
-
-# Target minimi per macchina (valori base)
-target_macchine = {
-    "1-PFG": 8.00,
-    "F03": 8.00,
-    "7-SL25": 6.00,
-    "8-SL150MC": 6.00,
-    "T15":14.00,
-    "16-ALFA1_IA_FANUC":9.00,
-    "18-MCM_CLOCK":15.00,
-    "19-INTEGREX_J200": 13.00,
-    "T22":14.00,
-    "24-MCM_CONCEPT": 22.00,
-    "26-INTEGREX_J200":12.00,
-    "27-INTEGREX_200":11.00,
-    "30-LYNX_300M":8.00,
-    "31-QTN_200_MSY":12.00,
-    "33-VTC800_MAZAK":8.00,
-    "34-INTEGREX_I300":14.00,
-    "36-DMG_NMV_3000":20.00,
-    "66-QTN_200_MSY":13.00,
-    "70-PUMA_GT2600LM":6.00,
-    "71-INTEGREX":12.00,
-    "72-VARIAXIS_J500":11.00,
-    "73-VARIAXIS_J500":10.00,
-    "77-INTEGREX":12.00,
-    "81-MITSUBISHI_MV1200S":13.00,
-    "103-DMG_NMV_5000":10.00,
-    "104-DMG_NMV_3000":20.00,
-    "115-MITSUBISHI_MV1200R":10.00,
-    "136_DMG":20.00,
-    "158-DMG":20.00,
-    "161-MITSUBISHI_MV1200R":13.00,
-    # aggiungi altre macchine qui...
+# CONFIGURAZIONE DATABASE
+DB_CONFIG = {
+    "user": "sa",
+    "password": "BIRoccio",
+    "server": "192.168.50.243",
+    "database": "BENOZZIPROD",
+    "driver": "SQL+Server",
 }
 
 # ------------------------------------------------------------
-# Gruppi di macchine per macro-selezioni
-gruppi_macchine = {
-    "FRESE ITALIA": [
-        "1-PFG", "18-MCM_CLOCK", "24-MCM_CONCEPT", "33-VTC800_MAZAK",
-        "36-DMG_NMV_3000", "72-VARIAXIS_J500", "73-VARIAXIS_J500",
-        "103-DMG_NMV_5000", "104-DMG_NMV_3000", "136_DMG", "158-DMG"
-    ],
-    "TORNI ITALIA": [
-        "7-SL25", "8-SL150MC", "19-INTEGREX_J200", "26-INTEGREX_J200",
-        "27-INTEGREX_200", "30-LYNX_300M", "31-QTN_200_MSY", "34-INTEGREX_I300",
-        "66-QTN_200_MSY", "70-PUMA_GT2600LM", "71-INTEGREX", "77-INTEGREX"
-    ],
-    "ELETTROEROSIONE ITALIA": [
-        "16-ALFA1_IA_FANUC", "81-MITSUBISHI_MV1200S", 
-        "115-MITSUBISHI_MV1200R", "161-MITSUBISHI_MV1200R"
-    ],
-    "TUTTE ITALIA": [
-        "1-PFG", "7-SL25", "8-SL150MC", "16-ALFA1_IA_FANUC", "18-MCM_CLOCK",
-        "19-INTEGREX_J200", "24-MCM_CONCEPT", "26-INTEGREX_J200", "27-INTEGREX_200",
-        "33-VTC800_MAZAK", "103-DMG_NMV_5000", "30-LYNX_300M", "31-QTN_200_MSY",
-        "34-INTEGREX_I300", "36-DMG_NMV_3000", "66-QTN_200_MSY", "70-PUMA_GT2600LM",
-        "71-INTEGREX", "72-VARIAXIS_J500", "73-VARIAXIS_J500", "77-INTEGREX",
-        "81-MITSUBISHI_MV1200S", "104-DMG_NMV_3000", "115-MITSUBISHI_MV1200R",
-        "136_DMG", "158-DMG", "161-MITSUBISHI_MV1200R"
-    ],
-    "FRESE TUNISIA": ["F03"],
-    "TORNI TUNISIA": ["T15", "T22"],
-    "TUTTE TUNISIA": ["F03", "T15", "T22"]
-}
+# Funzione di utilità per creare la connessione
+def get_engine():
+    conn_str = f"mssql+pyodbc://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['server']}/{DB_CONFIG['database']}?driver={DB_CONFIG['driver']}"
+    return create_engine(conn_str)
+
+# ------------------------------------------------------------
+# Funzione generica per leggere query
+@st.cache_data(ttl=600)
+def read_query(query: str) -> pd.DataFrame:
+    try:
+        engine = get_engine()
+        df = pd.read_sql(query, engine)
+        return df
+    except Exception as e:
+        st.error(f"Errore nel caricamento dati: {e}")
+        return pd.DataFrame()
+    
+@st.cache_data(ttl=600)
+def load_gruppi_macchine():
+    """
+    Restituisce un dizionario: NomeGruppo -> lista di macchine
+    """
+    query = "SELECT NomeGruppo, DescrMacchina FROM dbo.BENOZZI_VistaGruppiMacchine"
+    df = read_query(query)  # read_query deve restituire un DataFrame
+
+    gruppi_dict = {}
+    for row in df.itertuples():
+        gruppi_dict.setdefault(row.NomeGruppo, []).append(row.DescrMacchina)
+
+    return gruppi_dict
+
+# ------------------------------------------------------------
+# Carica target macchine dal DB
+@st.cache_data(ttl=600)
+def load_target_macchine():
+    try:
+        engine = get_engine()
+        query = "SELECT DescrMacchina, GiorniAnno, OreAnno FROM dbo.BENOZZI_TargetMacchine"
+        df = pd.read_sql(query, engine)
+        # Dizionario: macchina -> ore/giorno
+        target_dict = {row.DescrMacchina: row.OreAnno / row.GiorniAnno for row in df.itertuples()}
+        return target_dict
+    except Exception as e:
+        st.error(f"Errore caricamento target macchine: {e}")
+        return {}
 
 mesi_nome = {
     1: "Gennaio", 2: "Febbraio", 3: "Marzo", 4: "Aprile",
     5: "Maggio", 6: "Giugno", 7: "Luglio", 8: "Agosto",
     9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre"
 }
-
 
 # ------------------------------------------------------------
 # Aggiorna ogni 15 minuti
@@ -139,40 +92,29 @@ def get_client_ip():
 
 def get_min_max(macchina, tipo_periodo, start_date, end_date):
     giorni_periodo = (end_date - start_date).days + 1
+    target_macchine = load_target_macchine()
+    gruppi_macchine = load_gruppi_macchine()
 
-    # Calcolo max_barra sempre come prima
+    # Calcolo max_barra
+    max_barra = 24 * giorni_periodo
+    # Se è un gruppo, somma per numero macchine
     if macchina in gruppi_macchine:
-        # max per gruppo: 24 ore * giorni * numero macchine
-        max_barra = 24 * giorni_periodo * len(gruppi_macchine[macchina])
-    else:
-        max_barra = 24 * giorni_periodo
+        max_barra *= len(gruppi_macchine[macchina])
+
+    # Funzione di fallback
+    def fallback_min():
+        if tipo_periodo == "Giorno":
+            return 12
+        elif tipo_periodo == "Settimana":
+            return 84
+        else:
+            return 12 * giorni_periodo
 
     # Calcolo minimo
     if macchina in gruppi_macchine:
-        # somma dei target di tutte le macchine del gruppo
-        minimo = 0
-        for m in gruppi_macchine[macchina]:
-            if m in target_macchine:
-                minimo += target_macchine[m] * giorni_periodo
-            else:
-                # fallback alla regola generale per singola macchina
-                if tipo_periodo == "Giorno":
-                    minimo += 12
-                elif tipo_periodo == "Settimana":
-                    minimo += 84
-                else:
-                    minimo += 12 * giorni_periodo
+        minimo = sum(target_macchine.get(m, fallback_min()) * giorni_periodo for m in gruppi_macchine[macchina])
     else:
-        # singola macchina
-        if macchina in target_macchine:
-            minimo = target_macchine[macchina] * giorni_periodo
-        else:
-            if tipo_periodo == "Giorno":
-                minimo = 12
-            elif tipo_periodo == "Settimana":
-                minimo = 84
-            else:
-                minimo = 12 * giorni_periodo
+        minimo = target_macchine.get(macchina, fallback_min()) * giorni_periodo
 
     return minimo, max_barra
 
@@ -185,32 +127,47 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
+# Carica mappa IP → macchina dal DB
+@st.cache_data(ttl=600)
+def load_ip_map():
+    try:
+        engine = get_engine()
+        query = "SELECT IndirizzoIP, DescrMacchina FROM dbo.BENOZZI_MappaIP"
+        df = pd.read_sql(query, engine)
+
+        # Converti in dizionario Python
+        ip_map = {row.IndirizzoIP: row.DescrMacchina for row in df.itertuples()}
+        return ip_map
+    except Exception as e:
+        st.error(f"Errore caricamento mappa IP: {e}")
+        return {None: "19-INTEGREX_J200"}  # fallback
+
+# ------------------------------------------------------------
+# Funzione di utilità per ottenere macchina dal IP
+def get_macchina_by_ip(ip: str):
+    ip_map = load_ip_map()
+    return ip_map.get(ip, ip_map.get(None))
+
+# ------------------------------------------------------------
 # Funzione per caricare i dati dal SQL Server 
 @st.cache_data(ttl=600) # tempo di vita della cache; il risultato viene considerato valido per xxx secondi.
 # Dopo xxx secondi la cache scade, quindi la funzione verrà eseguita di nuovo per aggiornare i dati.
 def load_data():
     try:
-        from sqlalchemy import create_engine
-
-        # Connessione al server SQL usando SQLAlchemy + pyodbc
-        conn_str = (
-            "mssql+pyodbc://sa:BIRoccio@192.168.50.243/BENOZZIPROD?driver=SQL+Server"
-        )
-        engine = create_engine(conn_str)
-
-        # Leggi direttamente la vista
+        engine = get_engine()
         query = "SELECT * FROM [dbo].[RiepilogoPerMacchinaData]"
         df = pd.read_sql(query, engine)
 
-        # --------------------------------------------------------
         # Trasforma le colonne in ore corrette
         for col in ["Work", "Pause", "Alarm", "Down"]:
-            df[col] = df[col]  # / 100_000_000 se necessario
+            if col in df.columns:
+                df[col] = df[col]  # / 100_000_000 se necessario
 
-        # --------------------------------------------------------
-        df['Anno'] = df['Data'].dt.year
-        df['Settimana'] = df['Data'].dt.isocalendar().week
-        df['Mese'] = df['Data'].dt.month
+        # Aggiungi colonne temporali
+        if "Data" in df.columns:
+            df["Anno"] = df["Data"].dt.year
+            df["Settimana"] = df["Data"].dt.isocalendar().week
+            df["Mese"] = df["Data"].dt.month
 
         return df
 
@@ -246,10 +203,14 @@ def filtri_grafico(label, tipo_periodo, df):
     import re
 
     # Lista dei nomi macchina originali
-    macchine = df["DescrMacchina"].unique()
+    macchine = list(df["DescrMacchina"].unique())
 
-    # Aggiungi i gruppi definiti
-    macchine = list(macchine) + list(gruppi_macchine.keys())
+    # Carica i gruppi dal DB
+    gruppi_macchine = load_gruppi_macchine()
+
+    # Aggiungi i nomi dei gruppi al menu
+    macchine = macchine + list(gruppi_macchine.keys())
+
 
     # Ordina i nomi macchina numericamente
     def estrai_numero(nome):
@@ -268,7 +229,9 @@ def filtri_grafico(label, tipo_periodo, df):
     else:
         client_ip = client_ip_raw
 
-    macchina_default = default_macchine_ip.get(client_ip, None)
+    macchina_default = get_macchina_by_ip(client_ip)
+
+    #macchina_default = default_macchine_ip.get(client_ip, None)
     
     if macchina_default and macchina_default in macchine_sorted:
         default_index = macchine_sorted.index(macchina_default)
@@ -430,6 +393,7 @@ def filtri_grafico(label, tipo_periodo, df):
 # ------------------------------------------------------------
 # Funzione per filtrare dati
 def filter_data(df, macchina, start_date, end_date):
+    gruppi_macchine = load_gruppi_macchine()
     if macchina in gruppi_macchine:
         macchine_da_usare = gruppi_macchine[macchina]
         mask = (
@@ -530,6 +494,7 @@ def draw_group_bar(df, gruppo, tipo_periodo, start_date, end_date, key=None):
     import streamlit as st
 
     # Macchine che fanno parte del gruppo
+    gruppi_macchine = load_gruppi_macchine()
     machines_in_group = gruppi_macchine[gruppo]
 
     # Filtra i dati solo per le macchine del gruppo e il periodo selezionato
@@ -636,6 +601,7 @@ if not modalita_confronto:
                 draw_barra(macchina, tipo_periodo, start_date, end_date, sums["Lavoro"], key=f"bar_{macchina}_{tipo_periodo}")
 
             # --- GRAFICO COLONNE SOLO PER GRUPPI ---
+            gruppi_macchine = load_gruppi_macchine()
             if macchina in gruppi_macchine:
                 draw_group_bar(df, macchina, tipo_periodo, start_date, end_date, key=f"groupbar_{macchina}")
 
@@ -664,6 +630,7 @@ else:
                     draw_barra(macchina1, tipo_periodo, start1, end1, sums1["Lavoro"], key=f"bar1_{macchina1}_{tipo_periodo}")
 
                 # --- GRAFICO COLONNE SOLO PER GRUPPI ---
+                gruppi_macchine = load_gruppi_macchine()
                 if macchina1 in gruppi_macchine:
                     draw_group_bar(df, macchina1, tipo_periodo, start1, end1, key=f"groupbar1_{macchina1}")
 
